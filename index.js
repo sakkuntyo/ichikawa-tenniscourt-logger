@@ -4,13 +4,17 @@ const fs = require('fs');
 const { setTimeout } = require('timers/promises');
 const tabletojson = require('tabletojson').Tabletojson;
 const cheerio = require('cheerio');
+const settings = JSON.parse(fs.readFileSync('./settings.json', 'utf8'));
 
-//line
-const axios = require('axios');
-const querystring = require('querystring');
-const lineNotifyToken = JSON.parse(fs.readFileSync("./settings.json", "utf8")).lineNotifyToken;
-
-const kakoyoyakuList = [];
+//db
+const { Pool } = require('pg');
+const pool = new Pool({
+  host: settings.pgHost,
+  port: settings.pgPort || 5432,
+  user: settings.pgUser,
+  password: settings.pgPassword,
+  database: settings.pgDatabase
+});
 
 (async () => {
   while(true){
@@ -85,7 +89,7 @@ const kakoyoyakuList = [];
 
       //AI生成コード
       //const weekdays = ['月', '火', '水', '木', '金', '土', '日', '祝'];      //全曜日選択
-      const weekdays = ['月', '土', '日', '祝'];      //全曜日選択
+      const weekdays = ['土', '日', '祝'];      //全曜日選択
       //const weekdays = ['土', '日', '祝'];
       for (const day of weekdays) {
         await page.click(`input[value="${day}"]`);
@@ -95,8 +99,6 @@ const kakoyoyakuList = [];
       await page.click('input[value="次へ >>"]');
       await page.waitForFunction(()=> document.readyState === "complete");
       
-      await setTimeout(5000);
-
       /*
       //次の日以降を見る
       await page.$eval('input[name="ucTermSetting$txtDateFrom"]',element => element.value = '')
@@ -114,7 +116,7 @@ const kakoyoyakuList = [];
         continue;
       }
 
-      await (await page.$x(`//a[contains(text(),"△") or contains(text(),"○")]`))[0].click();
+      //await (await page.$x(`//a[contains(text(),"△") or contains(text(),"○")]`))[0].click();
       for (const link of await page.$x(`//a[contains(text(),"△") or contains(text(),"○")]`)) {
         await link.click();
       }
@@ -123,58 +125,159 @@ const kakoyoyakuList = [];
       await page.click('input[type="submit"][value="次へ >>"]');
       await page.waitForFunction(()=> document.readyState === "complete");
       
-      await setTimeout(5000);
+      const $ = cheerio.load(await page.content());
+      const courtAvailables = [];
 
-      const timeseriesMaruOrSankaku = await page.$x(`//a[contains(text(),"△") or contains(text(),"○")]`);
-      if (timeseriesMaruOrSankaku.length === 0) {
-        console.log(`${new Date().toISOString()}: 時間毎の情報に △ も ○ も見つからなかったので次の周回へ進みます`);
-        await browser.close();
-        await setTimeout(60000);
-        continue;
+      function normalizeText(text) {
+        return (text || '')
+          .replace(/\u00a0/g, ' ')
+          .replace(/[ \t]+/g, ' ')
+          .replace(/\r/g, '')
+          .replace(/\n+/g, '\n')
+          .trim();
       }
-      await (await page.$x(`//a[contains(text(),"○")]`))[0].click();
-      await page.waitForFunction(()=> document.readyState === "complete");  
 
-      await page.click('input[type="submit"][value="次へ >>"]');
-      await page.waitForFunction(()=> document.readyState === "complete");
+      function parseJapaneseDate(text) {
+        const m = normalizeText(text).match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+        if (!m) {
+          throw new Error(`日付パース失敗: ${text}`);
+        }
+        const [, y, mo, d] = m;
+        return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      }
       
-      const courtname = (await page.$eval('span[id="dlRepeat_ctl00_tpItem_lblShisetsu"]',el => el.innerText)).toString();
-      const yoyakudate = (await page.$eval('span[id="dlRepeat_ctl00_tpItem_lblDay"]',el => el.innerText)).toString();
-      const yoyakutime = (await page.$eval('span[id="dlRepeat_ctl00_tpItem_lblTime"]',el => el.innerText)).toString();
-      console.log(`${new Date().toISOString()}: courtname => " + courtname`)
-      console.log(`${new Date().toISOString()}: yoyakudate => " + yoyakudate`)
-      console.log(`${new Date().toISOString()}: yoyakutime => " + yoyakutime`)
-
-      //過去予約チェック
-      if(kakoyoyakuList.includes(courtname + yoyakudate + yoyakutime)){
-	console.log(courtname + yoyakudate + yoyakutime + " は過去に予約したことがあるため予約しませんでした。")
-        await browser.close();
-        await setTimeout(60000);
-        continue
+      function parseTimeRange(text) {
+        const cleaned = normalizeText(text).replace(/\n/g, '');
+        const m = cleaned.match(/(\d{1,2}:\d{2})～(\d{1,2}:\d{2})/);
+        if (!m) {
+          throw new Error(`時間帯パース失敗: ${text}`);
+        }
+        return {
+          start_time: m[1],
+          end_time: m[2]
+        };
       }
-
-      //予約確定操作
-      await page.click('input[type="submit"][value="申込 >>"]');
-      await page.waitForFunction(()=> document.readyState === "complete");
-
-      //予約完了チェック
-      if(!page.url().match(/YoyakuKanryou.aspx/)){
-        console.log(`${new Date().toISOString()}: 何らかの理由で予約に失敗しました。`)
-        await browser.close();
-        await setTimeout(60000);
-        continue
+      
+      function mapStatus(cellText) {
+        const t = normalizeText(cellText);
+      
+        if (t.includes('○')) return 'available';
+        if (t.includes('△')) return 'partial';
+        if (t.includes('×')) return 'full';
+        if (t.includes('閉館')) return 'closed';
+        if (t.includes('－') || t === '-') return 'not_applicable';
+      
+        return 'unknown';
       }
-
-      //通知
-      kakoyoyakuList.push(courtname + yoyakudate + yoyakutime)
-      console.log(courtname + yoyakudate + yoyakutime)
-      const myLine = new Line();
-      myLine.setToken(lineNotifyToken);
-      myLine.notify(courtname + " の " + yoyakudate + " " + yoyakutime + " を取りました。" + "\n"
-	      + "id:" + JSON.parse(fs.readFileSync("./settings.json", "utf8")).userid + "\n"
-	      + "pass:" + JSON.parse(fs.readFileSync("./settings.json", "utf8")).password + "\n"
-	      + "url:" + "http://reserve.city.ichikawa.lg.jp/"
-      );
+    
+      console.log("-----コート情報抜き出し開始")
+      $('table[id*="_dgTable"]').each((_, tableEl) => {
+        const $table = $(tableEl);
+    
+        // 同じ施設ブロック内の施設名を取る
+        const $blockRoot = $table.closest('td').parent().closest('table').closest('td');
+        const facilityName = normalizeText(
+          $blockRoot.find('a[id$="_lnkShisetsu"]').first().text()
+        );
+    
+        if (!facilityName) {
+          console.log('facilityName が取れなかったので skip');
+          return;
+        }
+    
+        const $trs = $table.find('tr');
+        if ($trs.length < 2) return;
+    
+        // ヘッダ
+        const $headerTds = $trs.eq(0).find('td');
+        const playDate = parseJapaneseDate($headerTds.eq(0).text());
+    
+        const timeSlots = [];
+        $headerTds.slice(2).each((_, td) => {
+          const raw = normalizeText($(td).text());
+          if (raw) timeSlots.push(parseTimeRange(raw));
+        });
+    
+        // データ行
+        $trs.slice(1).each((_, tr) => {
+          const $tds = $(tr).find('td');
+          if ($tds.length < 3) return;
+    
+          const courtName = normalizeText($tds.eq(0).text());
+    
+          $tds.slice(2).each((idx, td) => {
+            const slot = timeSlots[idx];
+            if (!slot) return;
+    
+            const rawStatusText = normalizeText($(td).text());
+            const status = mapStatus(rawStatusText);
+    
+            courtAvailables.push({
+              source_site: 'reserve.city.ichikawa.lg.jp',
+              facility_name: facilityName,
+              court_name: courtName,
+              play_date: playDate,
+              start_time: slot.start_time,
+              end_time: slot.end_time,
+              status,
+              raw_status_text: rawStatusText
+            });
+          });
+        });
+      });
+      console.log("-----コート情報抜き出し終了")
+      
+      console.log(courtAvailables);
+      if (!courtAvailables.length) return;
+    
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+    
+        const sql = `
+          INSERT INTO court_availability (
+            source_site,
+            facility_name,
+            court_name,
+            play_date,
+            start_time,
+            end_time,
+            status
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          ON CONFLICT (
+            source_site,
+            facility_name,
+            court_name,
+            play_date,
+            start_time,
+            end_time
+          )
+          DO UPDATE SET
+            status = EXCLUDED.status,
+            fetched_at = NOW()
+        `;
+    
+        for (const row of courtAvailables) {
+          await client.query(sql, [
+            row.source_site,
+            row.facility_name,
+            row.court_name,
+            row.play_date,
+            row.start_time,
+            row.end_time,
+            row.status
+          ]);
+        }
+    
+        await client.query('COMMIT');
+        console.log("successfully db insert and commit")
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
 
       //終了処理
       await browser.close();
@@ -183,7 +286,7 @@ const kakoyoyakuList = [];
       console.log(`${new Date().toISOString()}: catched" + error`)
       console.error(error)
       await browser.close();
-      await setTimeout(10000);
+      await setTimeout(60000);
     }
   }
 })();

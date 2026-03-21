@@ -1,5 +1,7 @@
 {
-  "userid":"",
-  "password":"",
-  "konodaiLineNotifyToken":""
+  "pgHost":"",
+  "pgPort":"",
+  "pgDatabase":"",
+  "pgUser":"",
+  "pgPassword":""
 }

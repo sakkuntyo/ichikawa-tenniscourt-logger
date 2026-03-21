@@ -1,7 +1,8 @@
 {
   "dependencies": {
-    "axios": "^0.27.2",
+    "cheerio": "^1.2.0",
     "date-utils": "^1.2.21",
+    "pg": "^8.20.0",
     "puppeteer": "^17.1.1",
     "tabletojson": "^2.0.7"
   }
