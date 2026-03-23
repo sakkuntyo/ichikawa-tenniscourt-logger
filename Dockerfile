@@ -1,10 +1,11 @@
 FROM node:22-bookworm-slim
 
 ENV NODE_ENV=production \
-    TZ=Asia/Tokyo
+    TZ=Asia/Tokyo \
+    HEADLESS=true
 
-# Puppeteer/Chromium 実行に必要なライブラリ
 RUN apt-get update && apt-get install -y \
+    cron \
     ca-certificates \
     fonts-ipafont-gothic \
     fonts-ipafont-mincho \
@@ -45,14 +46,13 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# 依存関係を先にコピーしてキャッシュを効かせる
 COPY package*.json ./
 RUN npm ci --omit=dev
 
-# アプリ本体
 COPY . .
 
-# Docker では headless 実行が基本
-ENV HEADLESS=true
+COPY docker/crontab /etc/cron.d/ichikawa-tenniscourt-logger
+RUN chmod 0644 /etc/cron.d/ichikawa-tenniscourt-logger \
+    && crontab /etc/cron.d/ichikawa-tenniscourt-logger
 
-CMD ["node", "index.js"]
+CMD ["cron", "-f"]

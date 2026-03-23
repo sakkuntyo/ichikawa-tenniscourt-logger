@@ -1,0 +1,19 @@
+services:
+  ichikawa-tenniscourt-logger:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ichikawa-tenniscourt-logger
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Tokyo
+      HEADLESS: "true"
+      PGHOST: your-postgres-host
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: yourpassword
+      PGDATABASE: postgres
+      BASE_URL: http://reserve.city.ichikawa.lg.jp/
+      SEARCH_TERM: 1ヶ月
+      TARGET_WEEKDAYS: 土,日,祝,月
+      INCLUDE_FACILITIES: 国府台テニスコート,塩浜市民体育館テニスコート,Ｊ：ＣＯＭ北市川スポーツパーク,菅野終末処理場テニスコート
