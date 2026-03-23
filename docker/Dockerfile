@@ -55,4 +55,4 @@ COPY docker/crontab /etc/cron.d/ichikawa-tenniscourt-logger
 RUN chmod 0644 /etc/cron.d/ichikawa-tenniscourt-logger \
     && crontab /etc/cron.d/ichikawa-tenniscourt-logger
 
-CMD ["cron", "-f"]
+CMD ["sh", "-c", "printenv > /etc/environment && cron -f"]
