@@ -17,3 +17,9 @@ services:
       SEARCH_TERM: 1ヶ月
       TARGET_WEEKDAYS: 土,日,祝,月
       INCLUDE_FACILITIES: 国府台テニスコート,塩浜市民体育館テニスコート,Ｊ：ＣＯＭ北市川スポーツパーク,菅野終末処理場テニスコート
+    networks:
+      - app
+
+networks:
+  app:
+    external: true
