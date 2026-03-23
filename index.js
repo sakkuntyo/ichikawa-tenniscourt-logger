@@ -1,7 +1,6 @@
 require('date-utils');
 const puppeteer = require('puppeteer');
 const { setTimeout } = require('timers/promises');
-const tabletojson = require('tabletojson').Tabletojson;
 const cheerio = require('cheerio');
 
 // db
