@@ -48,9 +48,16 @@ const pool = new Pool({
 
 async function main() {
   const browser = await puppeteer.launch({
+    headless: config.headless,
     defaultViewport: null,
-    args: ['--no-sandbox'],
-    headless: config.headless
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--no-zygote',
+      '--single-process'
+    ]
   });
 
   try {
