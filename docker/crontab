@@ -2,4 +2,4 @@ SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 TZ=Asia/Tokyo
 
-*/5 * * * * . /etc/environment; cd /app && /usr/local/bin/node index.js >> /proc/1/fd/1 2>> /proc/1/fd/2
+*/1 * * * * . /etc/environment; cd /app && /usr/local/bin/node index.js >> /proc/1/fd/1 2>> /proc/1/fd/2
