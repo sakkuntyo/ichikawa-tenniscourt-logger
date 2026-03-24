@@ -15,7 +15,7 @@ services:
       PGDATABASE: ${PGDATABASE:-postgres}
       BASE_URL: ${BASE_URL:-http://reserve.city.ichikawa.lg.jp/}
       SEARCH_TERM: ${SEARCH_TERM:-1ヶ月}
-      TARGET_WEEKDAYS: ${TARGET_WEEKDAYS:-土,日,祝,月}
+      TARGET_WEEKDAYS: ${TARGET_WEEKDAYS:-土,日,祝}
       INCLUDE_FACILITIES: ${INCLUDE_FACILITIES:-国府台テニスコート,塩浜市民体育館テニスコート,Ｊ：ＣＯＭ北市川スポーツパーク,菅野終末処理場テニスコート}
     networks:
       - app
